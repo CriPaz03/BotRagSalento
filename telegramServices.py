@@ -1,14 +1,14 @@
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
-
+from gtts import gTTS
+import os
 from ragServices import RagServices
 
 
 class TelegramServices:
-
-    rag = RagServices()
     def __init__(self, token):
         self.token = token
+        self.rag = RagServices()
 
     def start_bot(self):
         application = Application.builder().token(self.token).build()
@@ -23,7 +23,7 @@ class TelegramServices:
     async def start(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         user = update.effective_user
         await update.message.reply_text(
-            f"""Ciao {user.username}! Sono un bot che risponde alle tue domande sul Salento nel alto-medioevo.Scrivimi una domanda e utilizzerò il sistema RAG per trovare informazioni rilevanti."""
+            f"""Ciao {user.username}! Sono un bot che risponde alle tue domande sul Salento nel alto-medioevo. Scrivimi una domanda e utilizzerò il sistema RAG per trovare informazioni rilevanti."""
         )
 
     async def set_prompt_1(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -56,8 +56,17 @@ Comandi disponibili:
 
         await update.message.reply_text("🔍 Sto cercando informazioni rilevanti...")
         try:
-            llm_response = await self.rag.query_llm_llama(question)
+            # Crea una nuova istanza di RagServices per ogni richiesta se necessario per utenti diversi
+            # Se hai bisogno di supportare più utenti contemporaneamente, dovresti creare un'istanza per ogni chat_id
+            # Esempio: self.rag_instances[update.effective_chat.id] = RagServices()
+
+            llm_response = await self.rag.query_llm_openai(question)
+            tts = gTTS(text=llm_response, lang="it")
+            filename = "response.mp3"
+            tts.save(filename)
             await update.message.reply_text(llm_response)
+            with open(filename, "rb") as audio:
+                await update.message.reply_voice(audio)
+            os.remove(filename)
         except Exception as e:
             await update.message.reply_text(f"Errore llm ({e})")
-

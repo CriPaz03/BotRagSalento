@@ -28,20 +28,22 @@ class RagServices:
             Rispondi alla seguente domanda utilizzando solo le informazioni fornite nel contesto.
             Se le informazioni nel contesto non sono sufficienti per rispondere alla domanda, dillo chiaramente.
     """
-    prompt = default_prompt
-    question = ""
 
+    def __init__(self):
+        self.base_prompt = self.default_prompt
+        self.full_prompt = self.default_prompt
+        self.question = ""
 
     def set_prompt(self, prompt: int):
         if prompt == 1:
-            self.prompt = self.prompt_1
+            self.base_prompt = self.prompt_1
         elif prompt == 2:
-            self.prompt = self.prompt_2
+            self.base_prompt = self.prompt_2
         else:
-            self.prompt = self.default_prompt
+            self.base_prompt = self.default_prompt
 
     def get_prompt(self):
-        return self.prompt
+        return self.base_prompt
 
     def query_vectorize(self, num_results: int = 5) -> dict:
         headers = {
@@ -63,7 +65,7 @@ class RagServices:
                 similarity = chunk.get("similarity", 0)
                 chunks_text += f"[source={source_id}&relevance={similarity:.2f}]\n{chunk.get('text', '').strip()}\n\n"
 
-            self.prompt += f"""
+            self.full_prompt = self.base_prompt + f"""
                            Contesto:
                            {chunks_text}
 
@@ -82,7 +84,7 @@ class RagServices:
             self.query_vectorize()
             response = ollama.chat(
                 model="llama3.1:8b",
-                messages=[{'role': 'user', 'content': self.prompt}],
+                messages=[{'role': 'user', 'content': self.full_prompt}],
             )
             return response['message']['content']
 
@@ -98,16 +100,16 @@ class RagServices:
             openai.api_key = os.environ.get("OPENAI_API_KEY", "")
 
             response = openai.ChatCompletion.create(
-                model="gpt-4",
+                model="gpt-3.5-turbo",
                 messages=[
-                    {"role": "system",
-                     "content": "Sei un assistente esperto sul salento nel periodo dell'alto-medeoevo"},
-                    {"role": "user", "content": self.prompt}
+                    {
+                        "role": "system",
+                        "content": "Sei un assistente esperto sul salento nel periodo dell'alto-medeoevo"
+                    },
+                    {"role": "user", "content": self.full_prompt}
                 ],
                 temperature=0.3,
-                max_tokens=1000
             )
-
             return response.choices[0].message.content
 
         except Exception as e:
