@@ -1,46 +1,50 @@
 import os
 import requests
 import logging
-from dotenv import load_dotenv
+
+from elevenlabs import ElevenLabs
 
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     level=logging.INFO
 )
-load_dotenv()
 VECTORIZE_RETRIEVAL_ENDPOINT = "https://api.vectorize.io/v1/org/e6ae581f-f84b-4a61-a5d3-6577191030a4/pipelines/aip098f7-e353-4183-a2f6-6d3d35c98192/retrieval"
-VECTORIZE_API_TOKEN = os.environ.get("VECTORIZE_API_TOKEN", "<token>")
 
 
 class RagServices:
-    default_prompt = """
+    prompt = {
+        1: """
             Tu sei un assistente esperto del Salento nel periodo alto-medioevale. 
             Rispondi alla seguente domanda utilizzando solo le informazioni fornite nel contesto.
             Se le informazioni nel contesto non sono sufficienti per rispondere alla domanda, dillo chiaramente.
-            """
-    prompt_1 = """
+            """,
+        2: """
             Tu sei una guida turistica esperto del Salento nel periodo alto-medioevale. 
             Rispondi alla seguente domanda utilizzando solo le informazioni fornite nel contesto.
             Se le informazioni nel contesto non sono sufficienti per rispondere alla domanda, dillo chiaramente.
-    """
-    prompt_2 = """
+            """,
+        3: """
             Tu sei un professore esperto del Salento nel periodo alto-medioevale. 
             Rispondi alla seguente domanda utilizzando solo le informazioni fornite nel contesto.
             Se le informazioni nel contesto non sono sufficienti per rispondere alla domanda, dillo chiaramente.
-    """
+            """,
+        4: """
+            Rispondi alla seguente domanda creando una mappa concettuale degli argomenti chiave e i loro
+            collegamenti basandoti sul seguente contesto:
+            """
+    }
 
-    def __init__(self):
-        self.base_prompt = self.default_prompt
-        self.full_prompt = self.default_prompt
+    def __init__(self, token, api_key_elevenlabs):
+        self.token = token
+        self.base_prompt = self.prompt[1]
+        self.full_prompt = self.prompt[1]
         self.question = ""
+        self.client_elevenlabs = ElevenLabs(
+            api_key=api_key_elevenlabs
+        )
 
-    def set_prompt(self, prompt: int):
-        if prompt == 1:
-            self.base_prompt = self.prompt_1
-        elif prompt == 2:
-            self.base_prompt = self.prompt_2
-        else:
-            self.base_prompt = self.default_prompt
+    def set_prompt(self, indice: int):
+        self.base_prompt = self.prompt[indice]
 
     def get_prompt(self):
         return self.base_prompt
@@ -48,7 +52,7 @@ class RagServices:
     def query_vectorize(self, num_results: int = 5) -> dict:
         headers = {
             'Content-Type': 'application/json',
-            'Authorization': VECTORIZE_API_TOKEN
+            'Authorization': self.token
         }
         data = {
             "question": self.question,
@@ -77,6 +81,16 @@ class RagServices:
             logging.error(f"Errore nella richiesta a Vectorize: {e}")
             return {"error": str(e)}
 
+    def text_to_speech(self, text: str):
+        audio_stream = self.client_elevenlabs.text_to_speech.convert_as_stream(
+            text=text,
+            voice_id="JBFqnCBsd6RMkjVDRZzb",
+            model_id="eleven_multilingual_v2"
+        )
+        with open("temp_audio.mp3", "wb") as f:
+            for chunk in audio_stream:
+                f.write(chunk)
+
     async def query_llm_llama(self, question: str):
         try:
             import ollama
@@ -86,7 +100,9 @@ class RagServices:
                 model="llama3.1:8b",
                 messages=[{'role': 'user', 'content': self.full_prompt}],
             )
-            return response['message']['content']
+            message = response['message']['content']
+            self.text_to_speech(message)
+            return message
 
         except Exception as e:
             logging.error(f"Errore nella chiamata all'LLM: {e}")
@@ -110,7 +126,9 @@ class RagServices:
                 ],
                 temperature=0.3,
             )
-            return response.choices[0].message.content
+            message = response.choices[0].message.content
+            self.text_to_speech(message)
+            return message
 
         except Exception as e:
             logging.error(f"Errore nella chiamata all'LLM: {e}")
